@@ -2,13 +2,42 @@ services:
   mongo:
     image: mongo:7
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongo_root_user
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
+      MONGO_INITDB_DATABASE: appdb
+    secrets:
+      - mongo_root_user
+      - mongo_root_password
     volumes:
       - mongo_data:/data/db
-      
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u $$(cat /run/secrets/mongo_root_user) -p $$(cat /run/secrets/mongo_root_password) --eval 'db.adminCommand({ ping: 1 })' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - multiservice_docker
+
   redis:
     image: 'redislabs/redismod'
-    ports:
-      - '6379:6379'
+    networks:
+      - multiservice_docker
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   web1:
     restart: on-failure
@@ -16,9 +45,24 @@ services:
     hostname: web1
     ports:
       - '81:5000'
+    secrets:
+      - mongo_root_user
+      - mongo_root_password
     depends_on:
       - mongo
       - redis
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - multiservice_docker
 
   web2:
     restart: on-failure
@@ -26,9 +70,24 @@ services:
     hostname: web2
     ports:
       - '82:5000'
+    secrets:
+      - mongo_root_user
+      - mongo_root_password
     depends_on:
       - mongo
       - redis
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - multiservice_docker
 
   nginx: 
     image: nginx:latest
@@ -39,5 +98,29 @@ services:
     depends_on:
       - web1
       - web2
+    networks:
+      - multiservice_docker
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   
   
+volumes:
+  mongo_data:
+
+networks:
+  multiservice_docker:
+    driver: bridge
+
+secrets:
+  mongo_root_user:
+    file: ./secrets/mongo_root_user.txt
+  mongo_root_password:
+    file: ./secrets/mongo_root_password.txt
