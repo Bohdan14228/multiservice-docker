@@ -1,20 +1,35 @@
 services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+      
   redis:
     image: 'redislabs/redismod'
     ports:
       - '6379:6379'
+
   web1:
     restart: on-failure
     build: ./web
     hostname: web1
     ports:
       - '81:5000'
+    depends_on:
+      - mongo
+      - redis
+
   web2:
     restart: on-failure
     build: ./web
     hostname: web2
     ports:
       - '82:5000'
+    depends_on:
+      - mongo
+      - redis
+
   nginx: 
     image: nginx:latest
     ports:
@@ -24,3 +39,5 @@ services:
     depends_on:
       - web1
       - web2
+  
+  
